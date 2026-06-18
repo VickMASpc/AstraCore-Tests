@@ -23,6 +23,12 @@ function createEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     GEMINI_AI_MODEL: "gemini-3.5-flash",
     GEMINI_FAST_MODEL: "gemini-3.1-flash-lite",
     GEMINI_RPG_MODEL: "gemini-3.1-flash-lite",
+    DEEP_RESEARCH_PLANNER_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_DETAIL_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_SOURCE_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_WRITER_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_FACTCHECK_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_FINAL_MODEL: "gemini-3.5-flash",
     ENABLE_GOOGLE_SEARCH: true,
     ENABLE_CODE_EXECUTION: true,
     ENABLE_PUBLIC_REPO_ANALYSIS: true,
@@ -82,6 +88,24 @@ describe("GeminiService", () => {
     await service.generateText({ contents: "hello" });
 
     expect(generateContent.mock.calls[0]?.[0].config.tools).toBeUndefined();
+  });
+
+  it("uses feature-based model selection when override is absent", async () => {
+    const { service, generateContent } = createService();
+    await service.generateText({ contents: "hello", feature: "profile" });
+
+    expect(generateContent.mock.calls[0]?.[0].model).toBe("gemini-3.1-flash-lite");
+  });
+
+  it("uses modelOverride when provided", async () => {
+    const { service, generateContent } = createService();
+    await service.generateText({
+      contents: "hello",
+      feature: "profile",
+      modelOverride: "gemini-2.5-pro"
+    });
+
+    expect(generateContent.mock.calls[0]?.[0].model).toBe("gemini-2.5-pro");
   });
 
   it("uses googleSearch for search generation", async () => {

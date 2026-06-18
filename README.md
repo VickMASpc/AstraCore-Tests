@@ -51,6 +51,12 @@ Gemini:
 - `GEMINI_AI_MODEL`
 - `GEMINI_FAST_MODEL`
 - `GEMINI_RPG_MODEL`
+- `DEEP_RESEARCH_PLANNER_MODEL`
+- `DEEP_RESEARCH_DETAIL_MODEL`
+- `DEEP_RESEARCH_SOURCE_MODEL`
+- `DEEP_RESEARCH_WRITER_MODEL`
+- `DEEP_RESEARCH_FACTCHECK_MODEL`
+- `DEEP_RESEARCH_FINAL_MODEL`
 
 Feature flags:
 
@@ -93,6 +99,7 @@ Profile and memory:
 - Professional AI uses `GEMINI_AI_MODEL`.
 - Profile extraction uses `GEMINI_FAST_MODEL`.
 - RPG narration uses `GEMINI_RPG_MODEL`.
+- Deep research stage overrides default to `GEMINI_AI_MODEL` when left blank.
 - Google Search grounding requires `ENABLE_GOOGLE_SEARCH=true`.
 - Gemini code execution requires `ENABLE_CODE_EXECUTION=true`.
 
@@ -114,6 +121,16 @@ Research:
 - `!research <topic>`
 - `!deepresearch <topic>`
 - `!sources`
+
+Research behavior:
+
+- `!research <topic>` runs a single Google Search-grounded research pass and stores the final report plus sources.
+- `!deepresearch <topic>` runs a multi-stage pipeline:
+  planner -> detail/source/writer in parallel -> fact-check -> final synthesis
+- All deep research stages use Google Search grounding.
+- Normal users only receive the final report. Internal planner, paper, and fact-check artifacts are persisted for maintainers and operators, not shown in chat.
+- `!sources` returns the source list for the latest stored research result in the current chat, whether it came from `!research` or `!deepresearch`.
+- There is no user-facing `!deepresearchdebug` command in the current implementation.
 
 Public repository analysis:
 
@@ -176,6 +193,40 @@ SQLite default:
 - Research and deep research have stricter per-user limits.
 - Public repo analysis has a per-user daily limit.
 - RPG actions share a per-user per-minute limit.
+- `!deepresearch` is intentionally stricter than `!research` because it is slower and more expensive.
+
+## Deep Research Pipeline
+
+`!deepresearch` is source-grounded and fact-checked, but it is not infallible.
+
+Architecture:
+
+```text
+user topic
+  -> planner (structured brief)
+  -> parallel branches
+     -> detail researcher
+     -> source auditor
+     -> writing researcher
+  -> fact-check judge
+  -> final synthesis author
+  -> final report + stored sources
+```
+
+Operational notes:
+
+- This path is slower and more expensive than `!research` because it makes multiple Gemini calls with Google Search grounding.
+- Fact-check failure stops the run before final synthesis.
+- One failed detail/source/writer branch can still produce a partial but usable final report.
+- Two or more failed detail/source/writer branches abort the run.
+- Final confidence is deterministic in code, not just model-authored prose. The service caps or lowers confidence when verdicts, source counts, failed branches, or blocked stages do not support stronger claims.
+- The final report includes uncertainty and source-quality framing, but should not be treated as a guarantee of factual perfection.
+
+Persistence and diagnostics:
+
+- Final user-facing reports still go into the existing research report/source tables so `!sources` stays compatible.
+- Deep research also stores a run record and per-stage artifacts, including stage status, model name, blocked flag, latency, sanitized errors, and stage text or JSON when available.
+- These traces are intended for maintainers and operators. They are not exposed to normal WhatsApp users by default.
 
 ## Security Restrictions
 

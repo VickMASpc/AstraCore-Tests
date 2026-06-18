@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { ProfessionalAiService } from "./ai/ai.service.js";
+import { DeepResearchService } from "./ai/deep-research.service.js";
 import { GitHubApiFetcher, RepoAnalysisService } from "./ai/github.service.js";
 import { ResearchService } from "./ai/research.service.js";
 import { createAiCommands } from "./commands/ai.commands.js";
@@ -75,12 +76,19 @@ export async function boot(): Promise<{ close(): Promise<void> }> {
   const profileService = new ProfileService(profilesRepo, gemini);
   const aiService = new ProfessionalAiService(aiRepo, profilesRepo, gemini);
   const researchService = new ResearchService(aiRepo, gemini);
+  const deepResearchService = new DeepResearchService(aiRepo, gemini, env);
   const repoAnalysisService = new RepoAnalysisService(aiRepo, gemini, new GitHubApiFetcher());
   const rpgService = new RpgService(rpgRepo, env.BOT_PREFIX, gemini);
   const router = new CommandRouter({
     commands: createCommandRegistry([
       ...createProfileCommands(profileService),
-      ...createAiCommands(aiService, profileService, researchService, repoAnalysisService),
+      ...createAiCommands(
+        aiService,
+        profileService,
+        researchService,
+        repoAnalysisService,
+        deepResearchService
+      ),
       ...createRpgCommands(rpgService)
     ]),
     prefix: env.BOT_PREFIX,

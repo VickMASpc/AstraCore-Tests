@@ -60,6 +60,12 @@ const rawEnvSchema = z
     GEMINI_AI_MODEL: z.string().trim().min(1),
     GEMINI_FAST_MODEL: z.string().trim().min(1),
     GEMINI_RPG_MODEL: z.string().trim().min(1),
+    DEEP_RESEARCH_PLANNER_MODEL: z.string().trim().optional().default(""),
+    DEEP_RESEARCH_DETAIL_MODEL: z.string().trim().optional().default(""),
+    DEEP_RESEARCH_SOURCE_MODEL: z.string().trim().optional().default(""),
+    DEEP_RESEARCH_WRITER_MODEL: z.string().trim().optional().default(""),
+    DEEP_RESEARCH_FACTCHECK_MODEL: z.string().trim().optional().default(""),
+    DEEP_RESEARCH_FINAL_MODEL: z.string().trim().optional().default(""),
     ENABLE_GOOGLE_SEARCH: booleanFromEnv.default(true),
     ENABLE_CODE_EXECUTION: booleanFromEnv.default(true),
     ENABLE_PUBLIC_REPO_ANALYSIS: booleanFromEnv.default(true),
@@ -92,7 +98,13 @@ const rawEnvSchema = z
 
 const envSchema = rawEnvSchema.transform((env) => ({
   ...env,
-  OWNER_NUMBERS: parseOwnerNumbers(env.OWNER_NUMBERS)
+  OWNER_NUMBERS: parseOwnerNumbers(env.OWNER_NUMBERS),
+  DEEP_RESEARCH_PLANNER_MODEL: env.DEEP_RESEARCH_PLANNER_MODEL || env.GEMINI_AI_MODEL,
+  DEEP_RESEARCH_DETAIL_MODEL: env.DEEP_RESEARCH_DETAIL_MODEL || env.GEMINI_AI_MODEL,
+  DEEP_RESEARCH_SOURCE_MODEL: env.DEEP_RESEARCH_SOURCE_MODEL || env.GEMINI_AI_MODEL,
+  DEEP_RESEARCH_WRITER_MODEL: env.DEEP_RESEARCH_WRITER_MODEL || env.GEMINI_AI_MODEL,
+  DEEP_RESEARCH_FACTCHECK_MODEL: env.DEEP_RESEARCH_FACTCHECK_MODEL || env.GEMINI_AI_MODEL,
+  DEEP_RESEARCH_FINAL_MODEL: env.DEEP_RESEARCH_FINAL_MODEL || env.GEMINI_AI_MODEL
 }));
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -113,6 +125,12 @@ export function getSafeEnvSummary(env: AppEnv): Record<string, unknown> {
     geminiAiModel: env.GEMINI_AI_MODEL,
     geminiFastModel: env.GEMINI_FAST_MODEL,
     geminiRpgModel: env.GEMINI_RPG_MODEL,
+    deepResearchPlannerModel: env.DEEP_RESEARCH_PLANNER_MODEL,
+    deepResearchDetailModel: env.DEEP_RESEARCH_DETAIL_MODEL,
+    deepResearchSourceModel: env.DEEP_RESEARCH_SOURCE_MODEL,
+    deepResearchWriterModel: env.DEEP_RESEARCH_WRITER_MODEL,
+    deepResearchFactcheckModel: env.DEEP_RESEARCH_FACTCHECK_MODEL,
+    deepResearchFinalModel: env.DEEP_RESEARCH_FINAL_MODEL,
     logLevel: env.LOG_LEVEL,
     nodeEnv: env.NODE_ENV
   };

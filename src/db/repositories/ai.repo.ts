@@ -1,8 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../client.js";
 import {
   aiCodeReviews,
   aiConversations,
+  aiDeepResearchArtifacts,
+  aiDeepResearchRuns,
   aiMessages,
   aiRepoFiles,
   aiRepoReports,
@@ -13,6 +15,8 @@ import {
   groups,
   users
 } from "../schema.js";
+import { dedupeSources } from "../../ai/research-sources.js";
+import type { ResearchSource } from "../../ai/deep-research.types.js";
 
 export function createAiRepository(db: DatabaseClient) {
   return {
@@ -72,11 +76,53 @@ export function createAiRepository(db: DatabaseClient) {
       await db.insert(aiResearchSources).values(input);
       return db.query.aiResearchSources.findFirst({ where: eq(aiResearchSources.id, input.id) });
     },
-    async listLatestResearchSources(conversationId: string) {
-      const latestReport = await db.query.aiResearchReports.findFirst({
-        where: eq(aiResearchReports.conversationId, conversationId),
-        orderBy: [desc(aiResearchReports.createdAt)]
+    async createDeepResearchRun(input: typeof aiDeepResearchRuns.$inferInsert) {
+      await db.insert(aiDeepResearchRuns).values(input);
+      return db.query.aiDeepResearchRuns.findFirst({ where: eq(aiDeepResearchRuns.id, input.id) });
+    },
+    async updateDeepResearchRun(
+      runId: string,
+      updates: Partial<typeof aiDeepResearchRuns.$inferInsert>
+    ) {
+      await db
+        .update(aiDeepResearchRuns)
+        .set({
+          ...updates,
+          updatedAt: sql`CURRENT_TIMESTAMP`
+        })
+        .where(eq(aiDeepResearchRuns.id, runId));
+
+      return db.query.aiDeepResearchRuns.findFirst({ where: eq(aiDeepResearchRuns.id, runId) });
+    },
+    async createDeepResearchArtifact(input: typeof aiDeepResearchArtifacts.$inferInsert) {
+      await db.insert(aiDeepResearchArtifacts).values(input);
+      return db.query.aiDeepResearchArtifacts.findFirst({
+        where: eq(aiDeepResearchArtifacts.id, input.id)
       });
+    },
+    async listDeepResearchArtifactsForRun(runId: string) {
+      return db.query.aiDeepResearchArtifacts.findMany({
+        where: eq(aiDeepResearchArtifacts.runId, runId),
+        orderBy: [desc(aiDeepResearchArtifacts.createdAt)]
+      });
+    },
+    async getLatestDeepResearchRunForConversation(conversationId: string) {
+      return db
+        .select()
+        .from(aiDeepResearchRuns)
+        .where(eq(aiDeepResearchRuns.conversationId, conversationId))
+        .orderBy(desc(aiDeepResearchRuns.createdAt), sql`rowid desc`)
+        .limit(1)
+        .then((rows) => rows[0]);
+    },
+    async listLatestResearchSources(conversationId: string) {
+      const latestReport = await db
+        .select()
+        .from(aiResearchReports)
+        .where(eq(aiResearchReports.conversationId, conversationId))
+        .orderBy(desc(aiResearchReports.createdAt), sql`rowid desc`)
+        .limit(1)
+        .then((rows) => rows[0]);
 
       if (!latestReport) {
         return [];
@@ -85,6 +131,68 @@ export function createAiRepository(db: DatabaseClient) {
       return db.query.aiResearchSources.findMany({
         where: eq(aiResearchSources.reportId, latestReport.id)
       });
+    },
+    async listLatestSourcesForConversation(conversationId: string, limit = 20): Promise<ResearchSource[]> {
+      const latestReport = await db
+        .select()
+        .from(aiResearchReports)
+        .where(eq(aiResearchReports.conversationId, conversationId))
+        .orderBy(desc(aiResearchReports.createdAt), sql`rowid desc`)
+        .limit(1)
+        .then((rows) => rows[0]);
+      const latestDeepRun = await db
+        .select()
+        .from(aiDeepResearchRuns)
+        .where(
+          and(
+            eq(aiDeepResearchRuns.conversationId, conversationId),
+            sql`${aiDeepResearchRuns.status} in ('completed', 'partial')`
+          )
+        )
+        .orderBy(desc(aiDeepResearchRuns.createdAt), sql`rowid desc`)
+        .limit(1)
+        .then((rows) => rows[0]);
+
+      const latestReportCreatedAt = latestReport?.createdAt ?? "";
+      const latestRunCreatedAt = latestDeepRun?.createdAt ?? "";
+
+      if (latestDeepRun && latestRunCreatedAt > latestReportCreatedAt) {
+        const artifacts = await db.query.aiDeepResearchArtifacts.findMany({
+          where: eq(aiDeepResearchArtifacts.runId, latestDeepRun.id)
+        });
+        const merged = dedupeSources(
+          artifacts.flatMap((artifact) => {
+            if (!artifact.sourcesJson) {
+              return [];
+            }
+
+            try {
+              const parsed = JSON.parse(artifact.sourcesJson) as ResearchSource[];
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          })
+        );
+
+        return merged.slice(0, limit);
+      }
+
+      if (!latestReport) {
+        return [];
+      }
+
+      const reportSources = await db.query.aiResearchSources.findMany({
+        where: eq(aiResearchSources.reportId, latestReport.id)
+      });
+
+      return dedupeSources(
+        reportSources.map((source) => ({
+          title: source.title,
+          url: source.url,
+          ...(source.snippet ? { snippet: source.snippet } : {})
+        }))
+      ).slice(0, limit);
     },
     async listResearchReports() {
       return db.query.aiResearchReports.findMany();

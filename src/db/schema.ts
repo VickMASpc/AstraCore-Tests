@@ -205,6 +205,34 @@ export const aiResearchSources = sqliteTable("ai_research_sources", {
   ...timestamps
 });
 
+export const aiDeepResearchRuns = sqliteTable("ai_deep_research_runs", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").references(() => aiConversations.id),
+  query: text("query").notNull(),
+  status: text("status", { enum: ["running", "completed", "failed", "partial"] }).notNull(),
+  finalReportMarkdown: text("final_report_markdown"),
+  confidence: text("confidence", { enum: ["high", "medium", "low"] }),
+  ...timestamps
+});
+
+export const aiDeepResearchArtifacts = sqliteTable("ai_deep_research_artifacts", {
+  id: text("id").primaryKey(),
+  runId: text("run_id")
+    .notNull()
+    .references(() => aiDeepResearchRuns.id),
+  stage: text("stage", {
+    enum: ["planner", "detail", "source", "writer", "factcheck", "final"]
+  }).notNull(),
+  model: text("model").notNull(),
+  contentMarkdown: text("content_markdown"),
+  contentJson: text("content_json"),
+  sourcesJson: text("sources_json"),
+  blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+  errorCode: text("error_code"),
+  latencyMs: integer("latency_ms"),
+  ...timestamps
+});
+
 export const aiRepoReports = sqliteTable("ai_repo_reports", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").references(() => aiConversations.id),
@@ -374,6 +402,8 @@ export const schema = {
   aiContextSummaries,
   aiResearchReports,
   aiResearchSources,
+  aiDeepResearchRuns,
+  aiDeepResearchArtifacts,
   aiRepoReports,
   aiRepoFiles,
   aiCodeReviews,

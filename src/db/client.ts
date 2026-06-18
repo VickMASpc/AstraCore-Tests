@@ -211,6 +211,32 @@ export function initializeDatabaseSchema(sqlite: Database.Database): void {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (report_id) REFERENCES ai_research_reports(id)
     );
+    CREATE TABLE IF NOT EXISTS ai_deep_research_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      conversation_id TEXT,
+      query TEXT NOT NULL,
+      status TEXT NOT NULL,
+      final_report_markdown TEXT,
+      confidence TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id)
+    );
+    CREATE TABLE IF NOT EXISTS ai_deep_research_artifacts (
+      id TEXT PRIMARY KEY NOT NULL,
+      run_id TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      model TEXT NOT NULL,
+      content_markdown TEXT,
+      content_json TEXT,
+      sources_json TEXT,
+      blocked INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT,
+      latency_ms INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES ai_deep_research_runs(id)
+    );
     CREATE TABLE IF NOT EXISTS ai_repo_reports (
       id TEXT PRIMARY KEY NOT NULL,
       conversation_id TEXT,

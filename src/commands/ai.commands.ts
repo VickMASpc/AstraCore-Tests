@@ -1,4 +1,5 @@
 import type { Command } from "../router/command.types.js";
+import type { DeepResearchService } from "../ai/deep-research.service.js";
 import { parseGitHubUrl, type RepoAnalysisService } from "../ai/github.service.js";
 import type { ProfessionalAiService } from "../ai/ai.service.js";
 import type { ResearchService } from "../ai/research.service.js";
@@ -8,7 +9,8 @@ export function createAiCommands(
   aiService: ProfessionalAiService,
   profileService: ProfileService,
   researchService?: ResearchService,
-  repoAnalysisService?: RepoAnalysisService
+  repoAnalysisService?: RepoAnalysisService,
+  deepResearchService?: Pick<DeepResearchService, "run">
 ): Command[] {
   const questionHandler =
     (mode: string) =>
@@ -67,8 +69,10 @@ export function createAiCommands(
       rateLimitKey: "ai.deepresearch",
       handler: async (context) => ({
         ok: true as const,
-        reply: researchService
-          ? await researchService.deepResearch(context, context.rawArgs ?? "")
+        reply: deepResearchService
+          ? await deepResearchService.run(context, context.rawArgs ?? "")
+          : researchService
+            ? await researchService.deepResearch(context, context.rawArgs ?? "")
           : "Research service unavailable."
       })
     },

@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 import { ProfessionalAiService } from "../../src/ai/ai.service.js";
+import { DeepResearchService } from "../../src/ai/deep-research.service.js";
 import { GitHubApiFetcher, RepoAnalysisService } from "../../src/ai/github.service.js";
 import { ResearchService } from "../../src/ai/research.service.js";
 import { createAiCommands } from "../../src/commands/ai.commands.js";
@@ -23,49 +24,56 @@ function setup() {
   const db = drizzle(sqlite, { schema });
   const profilesRepo = createProfilesRepository(db);
   const aiRepo = createAiRepository(db);
+  const env = {
+    NODE_ENV: "test" as const,
+    BOT_NAME: "AstraCore",
+    BOT_PREFIX: "!",
+    OWNER_NUMBERS: [],
+    DATABASE_URL: "file:test",
+    DATABASE_DIALECT: "sqlite" as const,
+    WHATSAPP_AUTH_DIR: "",
+    WHATSAPP_PAIRING_NUMBER: "",
+    WHATSAPP_PRINT_QR: false,
+    PUBLIC_STATUS_SERVER: false,
+    PORT: 3000,
+    GEMINI_API_KEY: "key",
+    GEMINI_API_VERSION: "v1beta",
+    GEMINI_AI_MODEL: "gemini-3.5-flash",
+    GEMINI_FAST_MODEL: "gemini-3.1-flash-lite",
+    GEMINI_RPG_MODEL: "gemini-3.1-flash-lite",
+    DEEP_RESEARCH_PLANNER_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_DETAIL_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_SOURCE_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_WRITER_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_FACTCHECK_MODEL: "gemini-3.5-flash",
+    DEEP_RESEARCH_FINAL_MODEL: "gemini-3.5-flash",
+    ENABLE_GOOGLE_SEARCH: true,
+    ENABLE_CODE_EXECUTION: true,
+    ENABLE_PUBLIC_REPO_ANALYSIS: true,
+    ENABLE_STRUCTURED_OUTPUT: true,
+    AI_MAX_CONTEXT_MESSAGES: 30,
+    AI_MAX_GROUP_CONTEXT_MESSAGES: 20,
+    AI_MAX_RESPONSE_CHARS: 12000,
+    AI_REPLY_CHUNK_SIZE: 3500,
+    RESEARCH_RATE_LIMIT_PER_USER_PER_HOUR: 10,
+    DEEP_RESEARCH_RATE_LIMIT_PER_USER_PER_DAY: 5,
+    REPO_ANALYSIS_RATE_LIMIT_PER_USER_PER_DAY: 10,
+    GENERAL_AI_RATE_LIMIT_PER_USER_PER_HOUR: 60,
+    RPG_RATE_LIMIT_PER_USER_PER_MINUTE: 20,
+    MAX_USER_MEMORY_ITEMS: 1000,
+    MAX_GROUP_MEMORY_ITEMS: 2000,
+    MAX_USER_PROFILE_FACTS: 500,
+    MAX_GROUP_PROFILE_FACTS: 800,
+    MEMORY_REVIEW_INTERVAL_DAYS: 30,
+    LOG_LEVEL: "info" as const
+  };
   const generateContent = vi.fn(async (params) => ({
     text: `response:${params.contents}`,
     candidates: [{ finishReason: "STOP" }] as unknown[],
     usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
   }));
   const gemini = new GeminiService({
-    env: {
-      NODE_ENV: "test",
-      BOT_NAME: "AstraCore",
-      BOT_PREFIX: "!",
-      OWNER_NUMBERS: [],
-      DATABASE_URL: "file:test",
-      DATABASE_DIALECT: "sqlite",
-      WHATSAPP_AUTH_DIR: "",
-      WHATSAPP_PAIRING_NUMBER: "",
-      WHATSAPP_PRINT_QR: false,
-      PUBLIC_STATUS_SERVER: false,
-      PORT: 3000,
-      GEMINI_API_KEY: "key",
-      GEMINI_API_VERSION: "v1beta",
-      GEMINI_AI_MODEL: "gemini-3.5-flash",
-      GEMINI_FAST_MODEL: "gemini-3.1-flash-lite",
-      GEMINI_RPG_MODEL: "gemini-3.1-flash-lite",
-      ENABLE_GOOGLE_SEARCH: true,
-      ENABLE_CODE_EXECUTION: true,
-      ENABLE_PUBLIC_REPO_ANALYSIS: true,
-      ENABLE_STRUCTURED_OUTPUT: true,
-      AI_MAX_CONTEXT_MESSAGES: 30,
-      AI_MAX_GROUP_CONTEXT_MESSAGES: 20,
-      AI_MAX_RESPONSE_CHARS: 12000,
-      AI_REPLY_CHUNK_SIZE: 3500,
-      RESEARCH_RATE_LIMIT_PER_USER_PER_HOUR: 10,
-      DEEP_RESEARCH_RATE_LIMIT_PER_USER_PER_DAY: 5,
-      REPO_ANALYSIS_RATE_LIMIT_PER_USER_PER_DAY: 10,
-      GENERAL_AI_RATE_LIMIT_PER_USER_PER_HOUR: 60,
-      RPG_RATE_LIMIT_PER_USER_PER_MINUTE: 20,
-      MAX_USER_MEMORY_ITEMS: 1000,
-      MAX_GROUP_MEMORY_ITEMS: 2000,
-      MAX_USER_PROFILE_FACTS: 500,
-      MAX_GROUP_PROFILE_FACTS: 800,
-      MEMORY_REVIEW_INTERVAL_DAYS: 30,
-      LOG_LEVEL: "info"
-    },
+    env,
     logger: createLogger("silent"),
     client: { models: { generateContent } },
     callsRepository: aiRepo
@@ -73,6 +81,7 @@ function setup() {
   const profileService = new ProfileService(profilesRepo);
   const aiService = new ProfessionalAiService(aiRepo, profilesRepo, gemini);
   const researchService = new ResearchService(aiRepo, gemini);
+  const deepResearchService = new DeepResearchService(aiRepo, gemini, env);
   const repoFetcher = {
       fetchRepoSnapshot: vi.fn(async () => ({
         metadata: { fullName: "owner/repo", description: "Demo repo", defaultBranch: "main" },
@@ -88,13 +97,32 @@ function setup() {
   const router = new CommandRouter({
     commands: createCommandRegistry([
       ...createProfileCommands(profileService),
-      ...createAiCommands(aiService, profileService, researchService, repoAnalysisService)
+      ...createAiCommands(
+        aiService,
+        profileService,
+        researchService,
+        repoAnalysisService,
+        deepResearchService
+      )
     ]),
     prefix: "!",
     rateLimiter: new InMemoryRateLimiter({})
   });
 
-  return { db, profilesRepo, aiRepo, router, generateContent, gemini, repoFetcher };
+  return {
+    db,
+    profilesRepo,
+    aiRepo,
+    router,
+    generateContent,
+    gemini,
+    repoFetcher,
+    aiService,
+    profileService,
+    researchService,
+    repoAnalysisService,
+    deepResearchService
+  };
 }
 
 function ctx(overrides: Partial<IncomingMessageContext> = {}): IncomingMessageContext {
@@ -200,47 +228,189 @@ describe("professional ai commands", () => {
     expect((await aiRepo.listLatestResearchSources((await aiRepo.findConversationByScope("private", "user@s.whatsapp.net"))?.id ?? "")).length).toBe(2);
 
     const sources = await router.route(ctx({ commandText: "!sources", rawText: "!sources" }));
+    expect(sources.ok && sources.result.reply).toContain("Sources for latest research:");
     expect(sources.ok && sources.result.reply).toContain("https://example.com/a");
   });
 
-  it("deep research stores a report and does not fake sources when metadata is missing", async () => {
+  it("deep research uses the multi-stage pipeline and stores the final report", async () => {
     const { router, aiRepo, generateContent } = setup();
     generateContent
       .mockResolvedValueOnce({
-        text: "{\"subquestions\":[\"What is it?\",\"How is it used?\"]}",
-        candidates: [{ finishReason: "STOP" }],
+        text: JSON.stringify({
+          topic: "sqlite wal mode",
+          normalizedQuestion: "How does SQLite WAL mode work?",
+          scope: { depth: "technical" },
+          keyQuestions: ["How does WAL mode work?"],
+          requiredSourceTypes: ["primary docs"],
+          knownAmbiguities: [],
+          exclusionRules: [],
+          finalReportRequirements: ["Include uncertainty"]
+        }),
+        candidates: [{ finishReason: "STOP" }] as unknown[],
         usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
       })
       .mockResolvedValueOnce({
-        text: "Deep grounded answer",
+        text: "Detail paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Source paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Writer paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Fact-check report",
+        candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Final deep research report",
         candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[],
         usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
       });
 
     const result = await router.route(ctx({ commandText: "!deepresearch sqlite wal mode", rawText: "!deepresearch sqlite wal mode" }));
-    expect(result.ok && result.result.reply).toContain("Deep Research:");
-    expect(result.ok && result.result.reply).toContain("No grounded source metadata was returned.");
-    expect(String(generateContent.mock.calls[0]?.[0].contents)).toContain("Return JSON only.");
-    expect(String(generateContent.mock.calls[0]?.[0].contents)).toContain(
-      "{\"subquestions\":[\"question 1\",\"question 2\",\"question 3\"]}"
-    );
+    expect(result.ok && result.result.reply).toContain("Final deep research report");
+    expect(result.ok && result.result.reply).toContain("Confidence: low");
     expect(generateContent.mock.calls[0]?.[0].config.responseMimeType).toBe("application/json");
     expect(generateContent.mock.calls[0]?.[0].config.responseJsonSchema).toMatchObject({
       type: "object",
       properties: {
-        subquestions: {
-          type: "array",
-          items: {
-            type: "string"
-          },
-          minItems: 1,
-          maxItems: 5
+        topic: {
+          type: "string"
         }
       },
-      required: ["subquestions"],
+      required: ["topic", "normalizedQuestion", "scope", "keyQuestions", "requiredSourceTypes", "knownAmbiguities", "exclusionRules", "finalReportRequirements"],
       additionalProperties: false
     });
+    expect(generateContent.mock.calls.slice(1).every((call) => call[0]?.config.tools?.[0]?.googleSearch)).toBe(true);
     expect((await aiRepo.listResearchReports()).length).toBe(1);
+  });
+
+  it("sources after deep research returns the deep research source list", async () => {
+    const { router, generateContent } = setup();
+    generateContent
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          topic: "topic",
+          normalizedQuestion: "normalized",
+          scope: { depth: "technical" },
+          keyQuestions: ["k1"],
+          requiredSourceTypes: ["primary"],
+          knownAmbiguities: [],
+          exclusionRules: [],
+          finalReportRequirements: ["uncertainty"]
+        }),
+        candidates: [{ finishReason: "STOP" }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Detail paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/detail", title: "Detail Source" } }] } }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Source paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/shared", title: "Shared Source" } }] } }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Writer paper",
+        candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/shared", title: "Shared Source Duplicate" } }] } }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Fact-check report",
+        candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/fact", title: "Fact Source" } }] } }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: "Final report",
+        candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/final", title: "Final Source" } }] } }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      });
+
+    await router.route(ctx({ commandText: "!deepresearch topic", rawText: "!deepresearch topic" }));
+    const sources = await router.route(ctx({ commandText: "!sources", rawText: "!sources" }));
+
+    expect(sources.ok && sources.result.reply).toContain("https://example.com/detail");
+    expect(sources.ok && sources.result.reply).toContain("https://example.com/final");
+    const lines = sources.ok ? sources.result.reply.split("\n") : [];
+    expect(lines.filter((line) => line === "https://example.com/shared")).toHaveLength(1);
+  });
+
+  it("sources chooses the latest result between research modes", async () => {
+    const { router, generateContent } = setup();
+    generateContent
+      .mockResolvedValueOnce({
+        text: "Grounded answer",
+        candidates: [{ finishReason: "STOP", groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/old", title: "Old Source" } }] }, googleSearch: {} }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          topic: "topic",
+          normalizedQuestion: "normalized",
+          scope: { depth: "technical" },
+          keyQuestions: ["k1"],
+          requiredSourceTypes: ["primary"],
+          knownAmbiguities: [],
+          exclusionRules: [],
+          finalReportRequirements: ["uncertainty"]
+        }),
+        candidates: [{ finishReason: "STOP" }] as unknown[],
+        usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 }
+      })
+      .mockResolvedValueOnce({ text: "Detail paper", candidates: [{ finishReason: "STOP", googleSearch: {}, groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/new", title: "New Source" } }] } }] as unknown[], usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 } })
+      .mockResolvedValueOnce({ text: "Source paper", candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[], usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 } })
+      .mockResolvedValueOnce({ text: "Writer paper", candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[], usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 } })
+      .mockResolvedValueOnce({ text: "Fact-check report", candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[], usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 } })
+      .mockResolvedValueOnce({ text: "Final report", candidates: [{ finishReason: "STOP", googleSearch: {} }] as unknown[], usageMetadata: { promptTokenCount: 1, candidateTokenCount: 1, totalTokenCount: 2 } });
+
+    await router.route(ctx({ commandText: "!research first", rawText: "!research first" }));
+    await router.route(ctx({ commandText: "!deepresearch second", rawText: "!deepresearch second" }));
+    const sources = await router.route(ctx({ commandText: "!sources", rawText: "!sources" }));
+
+    expect(sources.ok && sources.result.reply).toContain("https://example.com/new");
+    expect(sources.ok && sources.result.reply).not.toContain("https://example.com/old");
+  });
+
+  it("sources returns the no-sources message when nothing exists", async () => {
+    const { router } = setup();
+
+    const sources = await router.route(ctx({ commandText: "!sources", rawText: "!sources" }));
+
+    expect(sources.ok && sources.result.reply).toBe("No stored sources for this chat.");
+  });
+
+  it("deep research with no topic returns the required-topic message without calling Gemini", async () => {
+    const { router, generateContent } = setup();
+
+    const result = await router.route(ctx({ commandText: "!deepresearch", rawText: "!deepresearch" }));
+
+    expect(result.ok && result.result.reply).toBe("A research topic is required.");
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it("keeps the ai.deepresearch rate-limit key on the deepresearch command", () => {
+    const { aiService, profileService, researchService, repoAnalysisService, deepResearchService } = setup();
+    const commands = createAiCommands(
+      aiService,
+      profileService,
+      researchService,
+      repoAnalysisService,
+      deepResearchService
+    );
+
+    expect(commands.find((command) => command.name === "deepresearch")?.rateLimitKey).toBe(
+      "ai.deepresearch"
+    );
   });
 
   it("repo analysis stores reports and review produces severity findings", async () => {

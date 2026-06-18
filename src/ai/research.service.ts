@@ -2,75 +2,9 @@ import { z } from "zod";
 import type { GeminiService } from "../gemini/gemini.client.js";
 import type { IncomingMessageContext } from "../router/command.types.js";
 import { createId } from "../utils/ids.js";
+import { compactSourceList, extractSourcesFromRaw } from "./research-sources.js";
 
 type AiRepository = ReturnType<typeof import("../db/repositories/ai.repo.js").createAiRepository>;
-
-const sourceSchema = z.object({
-  title: z.string().min(1),
-  url: z.string().url(),
-  snippet: z.string().optional()
-});
-
-function extractSourcesFromRaw(raw: unknown): Array<z.infer<typeof sourceSchema>> {
-  const matches: Array<z.infer<typeof sourceSchema>> = [];
-
-  const visit = (value: unknown) => {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        visit(item);
-      }
-      return;
-    }
-
-    if (typeof value !== "object" || value === null) {
-      return;
-    }
-
-    const record = value as Record<string, unknown>;
-    const maybeUrl = typeof record.uri === "string" ? record.uri : typeof record.url === "string" ? record.url : undefined;
-    const maybeTitle =
-      typeof record.title === "string"
-        ? record.title
-        : typeof record.domain === "string"
-          ? record.domain
-          : undefined;
-    const maybeSnippet =
-      typeof record.snippet === "string"
-        ? record.snippet
-        : typeof record.text === "string"
-          ? record.text
-          : undefined;
-
-    if (maybeUrl && maybeTitle) {
-      const parsed = sourceSchema.safeParse({
-        title: maybeTitle,
-        url: maybeUrl,
-        snippet: maybeSnippet
-      });
-      if (parsed.success && !matches.some((entry) => entry.url === parsed.data.url)) {
-        matches.push(parsed.data);
-      }
-    }
-
-    for (const child of Object.values(record)) {
-      visit(child);
-    }
-  };
-
-  visit(raw);
-  return matches;
-}
-
-function compactSourceList(sources: Array<{ title: string; url: string }>): string {
-  if (sources.length === 0) {
-    return "No grounded source metadata was returned.";
-  }
-
-  return sources
-    .slice(0, 5)
-    .map((source, index) => `${index + 1}. ${source.title}`)
-    .join("\n");
-}
 
 export class ResearchService {
   public constructor(
@@ -188,13 +122,17 @@ export class ResearchService {
 
   public async latestSources(context: IncomingMessageContext) {
     const conversation = await this.ensureConversation(context);
-    const sources = await this.repo.listLatestResearchSources(conversation.id);
+    const sources = await this.repo.listLatestSourcesForConversation(conversation.id);
 
     if (sources.length === 0) {
       return "No stored sources for this chat.";
     }
 
-    return sources.map((source, index) => `${index + 1}. ${source.title}\n${source.url}`).join("\n");
+    return [
+      "Sources for latest research:",
+      "",
+      sources.map((source, index) => `${index + 1}. ${source.title}\n${source.url}`).join("\n\n")
+    ].join("\n");
   }
 
   private async ensureConversation(context: IncomingMessageContext) {

@@ -6,6 +6,7 @@ export type GeminiRequestKind = "text" | "search" | "code" | "structured";
 export type GeminiBaseRequest = {
   contents: string;
   systemInstruction?: string;
+  modelOverride?: string;
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;

@@ -47,6 +47,10 @@ function getModelForFeature(env: AppEnv, feature: GeminiFeature): string {
   return env.GEMINI_AI_MODEL;
 }
 
+function resolveModel(env: AppEnv, request: GeminiTextRequest): string {
+  return request.modelOverride ?? getModelForFeature(env, request.feature ?? "ai");
+}
+
 function isRetryableError(error: unknown): boolean {
   const status =
     typeof error === "object" && error !== null
@@ -266,7 +270,7 @@ export class GeminiService {
     extraConfig: Record<string, unknown>
   ): Promise<GeminiTextResponse> {
     const feature = request.feature ?? "ai";
-    const model = getModelForFeature(this.env, feature);
+    const model = resolveModel(this.env, request);
     const startedAt = Date.now();
     const params: GeminiGenerateContentParams = {
       model,

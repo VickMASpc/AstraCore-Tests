@@ -19,6 +19,12 @@ function createValidEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.Proc
     GEMINI_AI_MODEL: "gemini-3.5-flash",
     GEMINI_FAST_MODEL: "gemini-3.1-flash-lite",
     GEMINI_RPG_MODEL: "gemini-3.1-flash-lite",
+    DEEP_RESEARCH_PLANNER_MODEL: "",
+    DEEP_RESEARCH_DETAIL_MODEL: "",
+    DEEP_RESEARCH_SOURCE_MODEL: "",
+    DEEP_RESEARCH_WRITER_MODEL: "",
+    DEEP_RESEARCH_FACTCHECK_MODEL: "",
+    DEEP_RESEARCH_FINAL_MODEL: "",
     ENABLE_GOOGLE_SEARCH: "true",
     ENABLE_CODE_EXECUTION: "true",
     ENABLE_PUBLIC_REPO_ANALYSIS: "true",
@@ -51,6 +57,29 @@ describe("loadEnv", () => {
     expect(env.WHATSAPP_PRINT_QR).toBe(false);
     expect(env.PUBLIC_STATUS_SERVER).toBe(true);
     expect(env.PORT).toBe(3000);
+  });
+
+  it("defaults deep research stage models to GEMINI_AI_MODEL when blank", () => {
+    const env = loadEnv(createValidEnv());
+
+    expect(env.DEEP_RESEARCH_PLANNER_MODEL).toBe(env.GEMINI_AI_MODEL);
+    expect(env.DEEP_RESEARCH_DETAIL_MODEL).toBe(env.GEMINI_AI_MODEL);
+    expect(env.DEEP_RESEARCH_SOURCE_MODEL).toBe(env.GEMINI_AI_MODEL);
+    expect(env.DEEP_RESEARCH_WRITER_MODEL).toBe(env.GEMINI_AI_MODEL);
+    expect(env.DEEP_RESEARCH_FACTCHECK_MODEL).toBe(env.GEMINI_AI_MODEL);
+    expect(env.DEEP_RESEARCH_FINAL_MODEL).toBe(env.GEMINI_AI_MODEL);
+  });
+
+  it("preserves explicit deep research stage model overrides", () => {
+    const env = loadEnv(
+      createValidEnv({
+        DEEP_RESEARCH_DETAIL_MODEL: "gemini-2.5-pro",
+        DEEP_RESEARCH_FINAL_MODEL: "gemini-2.5-flash"
+      })
+    );
+
+    expect(env.DEEP_RESEARCH_DETAIL_MODEL).toBe("gemini-2.5-pro");
+    expect(env.DEEP_RESEARCH_FINAL_MODEL).toBe("gemini-2.5-flash");
   });
 
   it("rejects an empty prefix", () => {
