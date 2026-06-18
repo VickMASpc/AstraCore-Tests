@@ -225,7 +225,7 @@ describe("professional ai commands", () => {
       "{\"subquestions\":[\"question 1\",\"question 2\",\"question 3\"]}"
     );
     expect(generateContent.mock.calls[0]?.[0].config.responseMimeType).toBe("application/json");
-    expect(generateContent.mock.calls[0]?.[0].config.responseSchema).toMatchObject({
+    expect(generateContent.mock.calls[0]?.[0].config.responseJsonSchema).toMatchObject({
       type: "object",
       properties: {
         subquestions: {

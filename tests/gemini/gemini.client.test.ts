@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { GeminiService } from "../../src/gemini/gemini.client.js";
+import { GeminiResponseParseError } from "../../src/gemini/gemini.errors.js";
 import { createLogger } from "../../src/observability/logger.js";
 import type { AppEnv } from "../../src/config/env.js";
 
@@ -170,19 +171,53 @@ describe("GeminiService", () => {
       expect.objectContaining({
         config: expect.objectContaining({
           responseMimeType: "application/json",
-          responseSchema: expect.objectContaining({
+          responseJsonSchema: expect.objectContaining({
             type: "object",
             additionalProperties: false,
             properties: {
               answer: { type: "number" }
             }
-          })
+          }),
+          temperature: 0,
+          systemInstruction: expect.stringContaining("JSON document only")
         })
       })
     );
   });
 
-  it("rejects bad structured JSON", async () => {
+  it("parses structured JSON with trailing prose", async () => {
+    const { service } = createService({
+      generateContent: vi.fn(async () => ({
+        text: "{\"answer\":42}\n\nExtra explanation after the JSON.",
+        candidates: []
+      }))
+    });
+
+    const result = await service.generateStructured({
+      contents: "json",
+      schema: z.object({ answer: z.number() })
+    });
+
+    expect(result.answer).toBe(42);
+  });
+
+  it("parses fenced structured JSON", async () => {
+    const { service } = createService({
+      generateContent: vi.fn(async () => ({
+        text: "```json\n{\"answer\":42}\n```",
+        candidates: []
+      }))
+    });
+
+    const result = await service.generateStructured({
+      contents: "json",
+      schema: z.object({ answer: z.number() })
+    });
+
+    expect(result.answer).toBe(42);
+  });
+
+  it("rejects invalid structured JSON", async () => {
     const { service } = createService({
       generateContent: vi.fn(async () => ({ text: "not-json", candidates: [] }))
     });
@@ -192,7 +227,20 @@ describe("GeminiService", () => {
         contents: "json",
         schema: z.object({ answer: z.number() })
       })
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(GeminiResponseParseError);
+  });
+
+  it("rejects wrong structured JSON shape", async () => {
+    const { service } = createService({
+      generateContent: vi.fn(async () => ({ text: "{\"answer\":\"nope\"}", candidates: [] }))
+    });
+
+    await expect(
+      service.generateStructured({
+        contents: "json",
+        schema: z.object({ answer: z.number() })
+      })
+    ).rejects.toBeInstanceOf(GeminiResponseParseError);
   });
 
   it("keeps API keys out of stored errors", async () => {
