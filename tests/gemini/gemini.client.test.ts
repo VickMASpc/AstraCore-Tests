@@ -156,7 +156,7 @@ describe("GeminiService", () => {
   });
 
   it("validates structured JSON", async () => {
-    const { service } = createService({
+    const { service, generateContent } = createService({
       generateContent: vi.fn(async () => ({ text: "{\"answer\":42}", candidates: [] }))
     });
 
@@ -166,6 +166,20 @@ describe("GeminiService", () => {
     });
 
     expect(result.answer).toBe(42);
+    expect(generateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          responseMimeType: "application/json",
+          responseSchema: expect.objectContaining({
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              answer: { type: "number" }
+            }
+          })
+        })
+      })
+    );
   });
 
   it("rejects bad structured JSON", async () => {

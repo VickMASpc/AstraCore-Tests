@@ -122,10 +122,21 @@ export class ResearchService {
 
   public async deepResearch(context: IncomingMessageContext, topic: string) {
     const conversation = await this.ensureConversation(context);
+    const subquestionSchema = z
+      .object({
+        subquestions: z.array(z.string()).min(1).max(5)
+      })
+      .strict();
     const subquestions = await this.gemini.generateStructured({
       feature: "ai",
-      contents: `Generate 3 short subquestions for deep research on: ${topic}`,
-      schema: z.object({ subquestions: z.array(z.string()).min(1).max(5) })
+      contents: [
+        `Generate exactly 3 short subquestions for deep research on: ${topic}`,
+        "Return JSON only.",
+        "The JSON must be exactly this shape:",
+        "{\"subquestions\":[\"question 1\",\"question 2\",\"question 3\"]}",
+        "Do not return a bare array."
+      ].join("\n"),
+      schema: subquestionSchema
     });
 
     const grounded = await this.gemini.generateWithGoogleSearch({

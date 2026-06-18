@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import type { AppEnv } from "../config/env.js";
 import type { SafeLogger } from "../observability/logger.js";
 import { redactSecrets } from "../security/redaction.js";
@@ -120,8 +121,10 @@ export class GeminiService {
   }
 
   public async generateStructured<T>(request: GeminiStructuredRequest<T>): Promise<T> {
+    const responseSchema = z.toJSONSchema(request.schema, { target: "openapi-3.0" });
     const response = await this.generate("structured", request, {
-      responseMimeType: "application/json"
+      responseMimeType: "application/json",
+      responseSchema
     });
 
     try {

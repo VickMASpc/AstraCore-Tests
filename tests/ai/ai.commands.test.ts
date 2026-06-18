@@ -220,6 +220,26 @@ describe("professional ai commands", () => {
     const result = await router.route(ctx({ commandText: "!deepresearch sqlite wal mode", rawText: "!deepresearch sqlite wal mode" }));
     expect(result.ok && result.result.reply).toContain("Deep Research:");
     expect(result.ok && result.result.reply).toContain("No grounded source metadata was returned.");
+    expect(String(generateContent.mock.calls[0]?.[0].contents)).toContain("Return JSON only.");
+    expect(String(generateContent.mock.calls[0]?.[0].contents)).toContain(
+      "{\"subquestions\":[\"question 1\",\"question 2\",\"question 3\"]}"
+    );
+    expect(generateContent.mock.calls[0]?.[0].config.responseMimeType).toBe("application/json");
+    expect(generateContent.mock.calls[0]?.[0].config.responseSchema).toMatchObject({
+      type: "object",
+      properties: {
+        subquestions: {
+          type: "array",
+          items: {
+            type: "string"
+          },
+          minItems: 1,
+          maxItems: 5
+        }
+      },
+      required: ["subquestions"],
+      additionalProperties: false
+    });
     expect((await aiRepo.listResearchReports()).length).toBe(1);
   });
 
