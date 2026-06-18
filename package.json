@@ -1,0 +1,37 @@
+{
+  "name": "astracore",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AstraCore TypeScript WhatsApp bot scaffold",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/app.ts",
+    "build": "tsc",
+    "start": "node dist/src/app.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^1.14.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.45.2",
+    "pino": "^9.11.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.3.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
