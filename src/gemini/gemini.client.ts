@@ -32,9 +32,6 @@ type ServiceDeps = {
   defaultTimeoutMs?: number;
 };
 
-const STRUCTURED_JSON_SYSTEM_INSTRUCTION =
-  "Respond with a single valid JSON document only. Do not include markdown, code fences, commentary, or any text before or after the JSON.";
-
 function getModelForFeature(env: AppEnv, feature: GeminiFeature): string {
   if (feature === "profile") {
     return env.GEMINI_FAST_MODEL;
@@ -67,120 +64,6 @@ function sanitizeErrorMessage(error: unknown): string {
   }
 
   return String(redactSecrets(String(error)));
-}
-
-function buildStructuredSystemInstruction(systemInstruction: string | undefined): string {
-  if (!systemInstruction) {
-    return STRUCTURED_JSON_SYSTEM_INSTRUCTION;
-  }
-
-  return [systemInstruction, STRUCTURED_JSON_SYSTEM_INSTRUCTION].join("\n\n");
-}
-
-function extractFencedJsonBlock(text: string): string | undefined {
-  const trimmed = text.trim();
-  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
-  if (!match) {
-    return undefined;
-  }
-
-  return match[1]?.trim() || undefined;
-}
-
-function extractLeadingJsonDocument(text: string): string | undefined {
-  const start = text.search(/\S/);
-  if (start < 0) {
-    return undefined;
-  }
-
-  const first = text[start];
-  if (first !== "{" && first !== "[") {
-    return undefined;
-  }
-
-  const stack: string[] = [];
-  let inString = false;
-  let escaped = false;
-
-  for (let index = start; index < text.length; index += 1) {
-    const char = text[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-
-      if (char === "\"") {
-        inString = false;
-      }
-
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{" || char === "[") {
-      stack.push(char);
-      continue;
-    }
-
-    if (char === "}" || char === "]") {
-      const opener = stack.pop();
-      if (!opener) {
-        return undefined;
-      }
-
-      if ((opener === "{" && char !== "}") || (opener === "[" && char !== "]")) {
-        return undefined;
-      }
-
-      if (stack.length === 0) {
-        const trailing = text.slice(index + 1).trimStart();
-        if (trailing.startsWith("{") || trailing.startsWith("[")) {
-          return undefined;
-        }
-
-        return text.slice(start, index + 1);
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function parseStructuredJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch (primaryError: unknown) {
-    const fenced = extractFencedJsonBlock(text);
-    if (fenced !== undefined) {
-      try {
-        return JSON.parse(fenced);
-      } catch {
-        // Fall through to the leading-document fallback.
-      }
-    }
-
-    const leadingDocument = extractLeadingJsonDocument(text);
-    if (leadingDocument !== undefined) {
-      try {
-        return JSON.parse(leadingDocument);
-      } catch {
-        // Fall through to the original parse error.
-      }
-    }
-
-    throw primaryError;
-  }
 }
 
 export class GeminiService {
@@ -242,22 +125,14 @@ export class GeminiService {
   }
 
   public async generateStructured<T>(request: GeminiStructuredRequest<T>): Promise<T> {
-    const responseJsonSchema = z.toJSONSchema(request.schema);
-    const response = await this.generate(
-      "structured",
-      {
-        ...request,
-        temperature: request.temperature ?? 0,
-        systemInstruction: buildStructuredSystemInstruction(request.systemInstruction)
-      },
-      {
-        responseMimeType: "application/json",
-        responseJsonSchema
-      }
-    );
+    const responseSchema = z.toJSONSchema(request.schema, { target: "openapi-3.0" });
+    const response = await this.generate("structured", request, {
+      responseMimeType: "application/json",
+      responseSchema
+    });
 
     try {
-      const parsed = parseStructuredJson(response.text);
+      const parsed = JSON.parse(response.text) as unknown;
       return request.schema.parse(parsed);
     } catch (error: unknown) {
       throw new GeminiResponseParseError(sanitizeErrorMessage(error));

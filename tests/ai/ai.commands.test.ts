@@ -279,7 +279,7 @@ describe("professional ai commands", () => {
     expect(result.ok && result.result.reply).toContain("Final deep research report");
     expect(result.ok && result.result.reply).toContain("Confidence: low");
     expect(generateContent.mock.calls[0]?.[0].config.responseMimeType).toBe("application/json");
-    expect(generateContent.mock.calls[0]?.[0].config.responseJsonSchema).toMatchObject({
+    expect(generateContent.mock.calls[0]?.[0].config.responseSchema).toMatchObject({
       type: "object",
       properties: {
         topic: {
